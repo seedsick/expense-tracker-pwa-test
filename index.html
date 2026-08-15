@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Persistent Expense Tracker</title>
+
+  <!-- PWA & Mobile Meta Tags -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Expenses" />
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js Plugin Datalabels CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --input-bg: #ffffff;
+      --danger: #ef4444;
+      --secondary: #0284c7;
+      --secondary-hover: #0369a1;
+      --accent-bg: #e0e7ff;
+      --item-bg: #f8fafc;
+    }
+
+    /* DARK MODE OVERRIDES */
+    [data-theme="dark"] {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --input-bg: #0f172a;
+      --danger: #f87171;
+      --secondary: #38bdf8;
+      --secondary-hover: #0284c7;
+      --accent-bg: #312e81;
+      --item-bg: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      background-color: var(--bg);
+      color: var(--text);
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    body {
+      padding: 0.75rem;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding-bottom: 4rem; /* Space for undo toast */
+    }
+
+    @media (min-width: 768px) {
+      body {
+        padding: 2rem;
+      }
+      .container {
+        max-width: 1100px;
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 1.5rem;
+      }
+      .full-width {
+        grid-column: span 2;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--border);
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.85rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .badges-group {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      color: var(--primary);
+    }
+
+    .theme-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.35rem 0.65rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      width: auto;
+      margin: 0;
+    }
+
+    .theme-toggle-btn:hover {
+      background: var(--accent-bg);
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    input, select, button {
+      padding: 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      width: 100%;
+      max-width: 100%;
+      outline: none;
+      background-color: var(--input-bg);
+      color: var(--text);
+      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+    }
+
+    /* REMOVE NUMBER INPUT ARROWS / SPINNERS */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+
+    input[type=number] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
+    button {
+      background-color: var(--primary);
+      color: #ffffff;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      margin-top: 0.25rem;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .backup-actions {
+      display: flex;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    .backup-btn {
+      flex: 1;
+      background-color: var(--secondary);
+      color: white;
+      padding: 0.65rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .backup-btn:hover {
+      background-color: var(--secondary-hover);
+    }
+
+    .chart-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    .mode-buttons {
+      display: flex;
+      width: 100%;
+      gap: 0.25rem;
+    }
+
+    .filter-btn {
+      flex: 1;
+      background: var(--accent-bg);
+      color: var(--primary);
+      padding: 0.5rem 0.25rem;
+      font-size: 0.8rem;
+      text-align: center;
+      border-radius: 6px;
+    }
+
+    .filter-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .chart-container {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      height: 280px;
+    }
+
+    .period-total-badge {
+      background-color: var(--accent-bg);
+      color: var(--primary);
+      padding: 0.35rem 0.65rem;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .percent-badge {
+      background-color: #fce7f3;
+      color: #ec4899;
+      padding: 0.35rem 0.65rem;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    [data-theme="dark"] .percent-badge {
+      background-color: #831843;
+      color: #f472b6;
+    }
+
+    .transaction-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
+    /* SWIPE TO DELETE CONTAINER STYLES */
+    .swipe-wrapper {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      background-color: var(--danger);
+      user-select: none;
+    }
+
+    .swipe-delete-bg {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 1.25rem;
+      color: white;
+      font-weight: bold;
+      font-size: 0.85rem;
+    }
+
+    .transaction-item {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      background: var(--item-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100%;
+      font-size: 0.85rem;
+      z-index: 2;
+      transition: transform 0.15s ease-out, background-color 0.3s;
+      touch-action: pan-y;
+    }
+
+    .transaction-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      max-width: 70%;
+    }
+
+    .transaction-title {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .transaction-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      word-break: break-word;
+    }
+
+    .transaction-action {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.25rem;
+    }
+
+    .transaction-amount {
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .delete-btn {
+      background: var(--danger);
+      color: white;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.7rem;
+      border-radius: 4px;
+      width: auto;
+    }
+
+    /* UNDO TOAST NOTIFICATION */
+    .undo-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(150%);
+      background-color: #1e293b;
+      color: #ffffff;
+      padding: 0.75rem 1.25rem;
+      border-radius: 30px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.85rem;
+      z-index: 1000;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    [data-theme="dark"] .undo-toast {
+      background-color: #334155;
+    }
+
+    .undo-toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .undo-btn {
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      padding: 0.3rem 0.75rem;
+      font-weight: 700;
+      font-size: 0.75rem;
+      border-radius: 15px;
+      cursor: pointer;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- ADD EXPENSE FORM -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Add Expense</h2>
+        <button type="button" class="theme-toggle-btn" onclick="toggleTheme()" id="theme-toggle-btn">
+          <span id="theme-icon">🌙</span> <span id="theme-text">Dark</span>
+        </button>
+      </div>
+      <form id="expense-form">
+        <div>
+          <label>Amount ($)</label>
+          <input type="number" id="amount" step="0.01" required placeholder="0.00">
+        </div>
+        <div>
+          <label>Category</label>
+          <select id="category" required>
+            <option value="Groceries">Groceries</option>
+            <option value="Restaurant">Restaurant</option>
+            <option value="Coffee & Drinks">Coffee & Drinks</option>
+            <option value="Bar">Bar</option>
+            <option value="Delivery">Delivery</option>
+            <option value="GoShare">GoShare</option>
+            <option value="Public Transport">Public Transport</option>
+            <option value="Taxi">Taxi</option>
+            <option value="Fuel">Fuel</option>
+            <option value="Parking & Maintenance">Parking & Maintenance</option>
+            <option value="Travel">Travel</option>
+            <option value="Outfits">Outfits</option>
+            <option value="Home Decor">Home Decor</option>
+            <option value="Daily Essentials">Daily Essentials</option>
+            <option value="Gardening">Gardening</option>
+            <option value="Pets">Pets</option>
+            <option value="Entertainment">Entertainment</option>
+            <option value="Sport & Fitness">Sport & Fitness</option>
+            <option value="Technology">Technology</option>
+            <option value="Medical">Medical</option>
+            <option value="Body Care">Body Care</option>
+            <option value="Rent & Utilities">Rent & Utilities</option>
+            <option value="Tax & Fees">Tax & Fees</option>
+            <option value="Investment">Investment</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label>Date</label>
+          <input type="date" id="date" required>
+        </div>
+        <div>
+          <label>Note</label>
+          <input type="text" id="note" placeholder="Note details...">
+        </div>
+        <button type="submit">Save Expense</button>
+      </form>
+    </div>
+
+    <!-- SPENDING HABITS CHART WITH PERCENTAGES -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Spending Habits</h2>
+      </div>
+      
+      <div class="chart-controls">
+        <div class="mode-buttons">
+          <button class="filter-btn active" onclick="setMode('daily')">Daily</button>
+          <button class="filter-btn" onclick="setMode('weekly')">Weekly</button>
+          <button class="filter-btn" onclick="setMode('monthly')">Monthly</button>
+          <button class="filter-btn" onclick="setMode('yearly')">Yearly</button>
+        </div>
+
+        <div id="period-selector-container">
+          <select id="period-select" onchange="onPeriodChange()"></select>
+        </div>
+      </div>
+
+      <div class="chart-container">
+        <canvas id="expenseChart"></canvas>
+      </div>
+    </div>
+
+    <!-- FILTER BY CATEGORY CARD -->
+    <div class="card full-width">
+      <div class="card-header">
+        <h2>Filter by Category</h2>
+        <div class="badges-group">
+          <span class="period-total-badge" id="category-total-badge">$0.00</span>
+          <span class="percent-badge" id="category-percent-badge">0% of period</span>
+        </div>
+      </div>
+      <div>
+        <label>Select Category</label>
+        <select id="category-filter-select" onchange="renderCategoryFilteredList()">
+          <option value="All">All Categories</option>
+          <option value="Groceries">Groceries</option>
+          <option value="Restaurant">Restaurant</option>
+          <option value="Coffee & Drinks">Coffee & Drinks</option>
+          <option value="Bar">Bar</option>
+          <option value="Delivery">Delivery</option>
+          <option value="GoShare">GoShare</option>
+          <option value="Public Transport">Public Transport</option>
+          <option value="Taxi">Taxi</option>
+          <option value="Fuel">Fuel</option>
+          <option value="Parking & Maintenance">Parking & Maintenance</option>
+          <option value="Travel">Travel</option>
+          <option value="Outfits">Outfits</option>
+          <option value="Home Decor">Home Decor</option>
+          <option value="Daily Essentials">Daily Essentials</option>
+          <option value="Gardening">Gardening</option>
+          <option value="Pets">Pets</option>
+          <option value="Entertainment">Entertainment</option>
+          <option value="Sport & Fitness">Sport & Fitness</option>
+          <option value="Technology">Technology</option>
+          <option value="Medical">Medical</option>
+          <option value="Body Care">Body Care</option>
+          <option value="Rent & Utilities">Rent & Utilities</option>
+          <option value="Tax & Fees">Tax & Fees</option>
+          <option value="Investment">Investment</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="transaction-list" id="category-transaction-list"></div>
+    </div>
+
+    <!-- DATA MANAGEMENT CARD (CSV BACKUP & RESTORE) -->
+    <div class="card full-width">
+      <div class="card-header">
+        <h2>Data Management</h2>
+      </div>
+      <div class="backup-actions">
+        <button class="backup-btn" onclick="exportToCSV()">Export CSV Backup</button>
+        <button class="backup-btn" onclick="document.getElementById('csv-file-input').click()">Import CSV Data</button>
+        <input type="file" id="csv-file-input" accept=".csv" style="display: none;" onchange="importFromCSV(event)" />
+      </div>
+    </div>
+
+  </div>
+
+  <!-- UNDO TOAST -->
+  <div id="undo-toast" class="undo-toast">
+    <span>Expense deleted</span>
+    <button class="undo-btn" onclick="undoDelete()">UNDO</button>
+  </div>
+
+  <script>
+    let db;
+    let expenses = [];
+    let currentMode = 'daily';
+    let chart;
+
+    // Undo State Management
+    let pendingDeleteTimer = null;
+    let pendingDeleteExpense = null;
+
+    // Register ChartDataLabels plugin
+    Chart.register(ChartDataLabels);
+
+    document.getElementById('date').valueAsDate = new Date();
+
+    // ----------------------------------------------------
+    // SERVICE WORKER REGISTRATION (PWA)
+    // ----------------------------------------------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+          .catch((err) => console.error('Service Worker registration failed:', err));
+      });
+    }
+
+    // ----------------------------------------------------
+    // DARK MODE MANAGEMENT
+    // ----------------------------------------------------
+    function initTheme() {
+      const savedTheme = localStorage.getItem('theme');
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+      applyTheme(theme);
+    }
+
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      applyTheme(newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const themeIcon = document.getElementById('theme-icon');
+      const themeText = document.getElementById('theme-text');
+
+      if (theme === 'dark') {
+        themeIcon.textContent = '☀️';
+        themeText.textContent = 'Light';
+      } else {
+        themeIcon.textContent = '🌙';
+        themeText.textContent = 'Dark';
+      }
+
+      if (chart) {
+        chart.options.plugins.legend.labels.color = theme === 'dark' ? '#f8fafc' : '#1e293b';
+        chart.update();
+      }
+    }
+
+    // ----------------------------------------------------
+    // INDEXEDDB DATABASE SETUP
+    // ----------------------------------------------------
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('ExpenseTrackerDB', 1);
+
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('expenses')) {
+            db.createObjectStore('expenses', { keyPath: 'id' });
+          }
+        };
+
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist();
+          }
+          resolve(db);
+        };
+
+        request.onerror = (e) => {
+          console.error('IndexedDB error:', e.target.errorCode);
+          reject(e);
+        };
+      });
+    }
+
+    function getAllExpensesFromDB() {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('expenses', 'readonly');
+        const store = tx.objectStore('expenses');
+        const request = store.getAll();
+
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    function addExpenseToDB(expense) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('expenses', 'readwrite');
+        const store = tx.objectStore('expenses');
+        const request = store.add(expense);
+
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    function deleteExpenseFromDB(id) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('expenses', 'readwrite');
+        const store = tx.objectStore('expenses');
+        const request = store.delete(id);
+
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    // ----------------------------------------------------
+    // CHART SETUP
+    // ----------------------------------------------------
+    const categoryColors = [
+      '#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b',
+      '#06b6d4', '#f43f5e', '#3b82f6', '#84cc16', '#a855f7',
+      '#14b8a6', '#eab308', '#f97316', '#0284c7', '#d946ef',
+      '#10b981', '#6366f1', '#f43f5e', '#8b5cf6', '#06b6d4',
+      '#f59e0b', '#3b82f6', '#84cc16', '#a855f7', '#64748b'
+    ];
+
+    const ctx = document.getElementById('expenseChart').getContext('2d');
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    chart = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          backgroundColor: categoryColors
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { 
+            position: 'bottom',
+            labels: { 
+              boxWidth: 10, 
+              padding: 8, 
+              font: { size: 10 },
+              color: isDark ? '#f8fafc' : '#1e293b'
+            }
+          },
+          datalabels: {
+            color: '#ffffff',
+            font: { weight: 'bold', size: 10 },
+            formatter: (value, ctx) => {
+              const dataset = ctx.chart.data.datasets[0];
+              const total = dataset.data.reduce((acc, current) => acc + current, 0);
+              if (total === 0) return '0%';
+              const pct = (value / total) * 100;
+              return pct > 3 ? `${pct.toFixed(1)}%` : '';
+            },
+            display: 'auto'
+          }
+        }
+      }
+    });
+
+    document.getElementById('expense-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const expense = {
+        id: Date.now(),
+        amount: parseFloat(document.getElementById('amount').value),
+        category: document.getElementById('category').value,
+        date: document.getElementById('date').value,
+        note: document.getElementById('note').value
+      };
+
+      await addExpenseToDB(expense);
+      await loadAndRender();
+      e.target.reset();
+      document.getElementById('date').valueAsDate = new Date();
+    });
+
+    async function loadAndRender() {
+      expenses = await getAllExpensesFromDB();
+      populatePeriodDropdown();
+      renderChartAndPeriodList();
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      populatePeriodDropdown();
+      renderChartAndPeriodList();
+    }
+
+    function onPeriodChange() {
+      renderChartAndPeriodList();
+    }
+
+    function getWeekInfo(dateObj) {
+      const d = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const year = d.getUTCFullYear();
+      const yearStart = new Date(Date.UTC(year, 0, 1));
+      const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+      
+      const key = `${year}-W${String(weekNo).padStart(2, '0')}`;
+      const label = `Week ${weekNo}, ${year}`;
+      return { key, label, year, weekNo };
+    }
+
+    function populatePeriodDropdown() {
+      const select = document.getElementById('period-select');
+      select.innerHTML = '';
+
+      if (currentMode === 'daily') {
+        const dates = [...new Set(expenses.map(item => item.date))].sort().reverse();
+        if (dates.length === 0) {
+          select.innerHTML = '<option value="today">Today</option>';
+        } else {
+          dates.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            select.appendChild(opt);
+          });
+        }
+      } 
+      else if (currentMode === 'weekly') {
+        const weeksMap = new Map();
+        expenses.forEach(item => {
+          const itemDate = new Date(item.date + 'T00:00:00');
+          const info = getWeekInfo(itemDate);
+          if (!weeksMap.has(info.key)) {
+            weeksMap.set(info.key, info.label);
+          }
+        });
+
+        const sortedKeys = Array.from(weeksMap.keys()).sort().reverse();
+
+        if (sortedKeys.length === 0) {
+          select.innerHTML = '<option value="all">All Time</option>';
+        } else {
+          const allOpt = document.createElement('option');
+          allOpt.value = 'all';
+          allOpt.textContent = 'All Weeks Combined';
+          select.appendChild(allOpt);
+
+          sortedKeys.forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = weeksMap.get(key);
+            select.appendChild(opt);
+          });
+        }
+      } 
+      else if (currentMode === 'monthly') {
+        const monthsMap = new Map();
+        expenses.forEach(item => {
+          const itemDate = new Date(item.date + 'T00:00:00');
+          const key = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}`;
+          const label = itemDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          if (!monthsMap.has(key)) {
+            monthsMap.set(key, label);
+          }
+        });
+
+        const sortedKeys = Array.from(monthsMap.keys()).sort().reverse();
+
+        if (sortedKeys.length === 0) {
+          select.innerHTML = '<option value="all">All Time</option>';
+        } else {
+          const allOpt = document.createElement('option');
+          allOpt.value = 'all';
+          allOpt.textContent = 'All Months Combined';
+          select.appendChild(allOpt);
+
+          sortedKeys.forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = monthsMap.get(key);
+            select.appendChild(opt);
+          });
+        }
+      }
+      else if (currentMode === 'yearly') {
+        const yearsMap = new Map();
+        expenses.forEach(item => {
+          const itemDate = new Date(item.date + 'T00:00:00');
+          const key = `${itemDate.getFullYear()}`;
+          const label = `${itemDate.getFullYear()}`;
+          if (!yearsMap.has(key)) {
+            yearsMap.set(key, label);
+          }
+        });
+
+        const sortedKeys = Array.from(yearsMap.keys()).sort().reverse();
+
+        if (sortedKeys.length === 0) {
+          select.innerHTML = '<option value="all">All Time</option>';
+        } else {
+          const allOpt = document.createElement('option');
+          allOpt.value = 'all';
+          allOpt.textContent = 'All Years Combined';
+          select.appendChild(allOpt);
+
+          sortedKeys.forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = yearsMap.get(key);
+            select.appendChild(opt);
+          });
+        }
+      }
+    }
+
+    function filterExpenses() {
+      const select = document.getElementById('period-select');
+      const selectedValue = select ? select.value : '';
+
+      return expenses.filter(item => {
+        if (currentMode === 'daily') {
+          return item.date === selectedValue;
+        } 
+        else if (currentMode === 'weekly') {
+          if (selectedValue === 'all') return true;
+          const itemDate = new Date(item.date + 'T00:00:00');
+          const info = getWeekInfo(itemDate);
+          return info.key === selectedValue;
+        } 
+        else if (currentMode === 'monthly') {
+          if (selectedValue === 'all') return true;
+          const itemDate = new Date(item.date + 'T00:00:00');
+          const key = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}`;
+          return key === selectedValue;
+        }
+        else if (currentMode === 'yearly') {
+          if (selectedValue === 'all') return true;
+          const itemDate = new Date(item.date + 'T00:00:00');
+          const key = `${itemDate.getFullYear()}`;
+          return key === selectedValue;
+        }
+      });
+    }
+
+    function renderChartAndPeriodList() {
+      const filtered = filterExpenses();
+      
+      const totals = {};
+      filtered.forEach(item => {
+        totals[item.category] = (totals[item.category] || 0) + item.amount;
+      });
+
+      chart.data.labels = Object.keys(totals);
+      chart.data.datasets[0].data = Object.values(totals);
+      chart.update();
+
+      renderCategoryFilteredList();
+    }
+
+    // ----------------------------------------------------
+    // CATEGORY FILTER CARD LOGIC (PERIOD FILTERED)
+    // ----------------------------------------------------
+    function renderCategoryFilteredList() {
+      const periodExpenses = filterExpenses();
+      
+      const selectedCategory = document.getElementById('category-filter-select').value;
+      const container = document.getElementById('category-transaction-list');
+      container.innerHTML = '';
+
+      let categoryExpenses = periodExpenses;
+      if (selectedCategory !== 'All') {
+        categoryExpenses = periodExpenses.filter(item => item.category === selectedCategory);
+      }
+
+      const categoryTotal = categoryExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+      const periodTotal = periodExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+      const percentage = periodTotal > 0 ? ((categoryTotal / periodTotal) * 100).toFixed(1) : '0';
+
+      document.getElementById('category-total-badge').textContent = `$${categoryTotal.toFixed(2)}`;
+      document.getElementById('category-percent-badge').textContent = `${percentage}% of period`;
+
+      const sorted = [...categoryExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      if (sorted.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:1rem;">No expenses found for this category in the selected period.</div>';
+        return;
+      }
+
+      sorted.forEach(item => {
+        container.appendChild(createTransactionDOM(item));
+      });
+    }
+
+    // ----------------------------------------------------
+    // DOM ITEM CREATION + SWIPE TO DELETE LOGIC
+    // ----------------------------------------------------
+    function createTransactionDOM(item) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'swipe-wrapper';
+
+      wrapper.innerHTML = `
+        <div class="swipe-delete-bg"><span>Delete</span></div>
+        <div class="transaction-item" id="tx-${item.id}">
+          <div class="transaction-info">
+            <span class="transaction-title">${item.category}</span>
+            <span class="transaction-sub">${item.date} ${item.note ? '• ' + item.note : ''}</span>
+          </div>
+          <div class="transaction-action">
+            <span class="transaction-amount">$${item.amount.toFixed(2)}</span>
+            <button class="delete-btn" onclick="triggerDeleteExpense(${item.id})">Delete</button>
+          </div>
+        </div>
+      `;
+
+      const swipeItem = wrapper.querySelector('.transaction-item');
+      let startX = 0;
+      let currentX = 0;
+      let isSwiping = false;
+
+      swipeItem.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        isSwiping = true;
+        swipeItem.style.transition = 'none';
+      }, { passive: true });
+
+      swipeItem.addEventListener('touchmove', (e) => {
+        if (!isSwiping) return;
+        const diffX = e.touches[0].clientX - startX;
+        if (diffX < 0) {
+          currentX = diffX;
+          swipeItem.style.transform = `translateX(${currentX}px)`;
+        }
+      }, { passive: true });
+
+      swipeItem.addEventListener('touchend', () => {
+        if (!isSwiping) return;
+        isSwiping = false;
+        swipeItem.style.transition = 'transform 0.15s ease-out';
+
+        const itemWidth = swipeItem.offsetWidth;
+        if (currentX < -(itemWidth * 0.3)) {
+          swipeItem.style.transform = `translateX(-100%)`;
+          setTimeout(() => triggerDeleteExpense(item.id), 150);
+        } else {
+          swipeItem.style.transform = 'translateX(0px)';
+        }
+        currentX = 0;
+      });
+
+      return wrapper;
+    }
+
+    // ----------------------------------------------------
+    // DELETION & UNDO LOGIC
+    // ----------------------------------------------------
+    async function triggerDeleteExpense(id) {
+      if (pendingDeleteTimer) {
+        clearTimeout(pendingDeleteTimer);
+        await commitPendingDelete();
+      }
+
+      pendingDeleteExpense = expenses.find(item => item.id === id);
+      if (!pendingDeleteExpense) return;
+
+      expenses = expenses.filter(item => item.id !== id);
+      populatePeriodDropdown();
+      renderChartAndPeriodList();
+
+      showUndoToast();
+
+      pendingDeleteTimer = setTimeout(async () => {
+        await commitPendingDelete();
+      }, 5000);
+    }
+
+    async function commitPendingDelete() {
+      if (pendingDeleteExpense) {
+        await deleteExpenseFromDB(pendingDeleteExpense.id);
+        pendingDeleteExpense = null;
+      }
+      hideUndoToast();
+      pendingDeleteTimer = null;
+    }
+
+    async function undoDelete() {
+      if (!pendingDeleteExpense) return;
+      
+      clearTimeout(pendingDeleteTimer);
+      pendingDeleteTimer = null;
+
+      expenses.push(pendingDeleteExpense);
+      pendingDeleteExpense = null;
+
+      hideUndoToast();
+      populatePeriodDropdown();
+      renderChartAndPeriodList();
+    }
+
+    function showUndoToast() {
+      const toast = document.getElementById('undo-toast');
+      toast.classList.add('show');
+    }
+
+    function hideUndoToast() {
+      const toast = document.getElementById('undo-toast');
+      toast.classList.remove('show');
+    }
+
+    // ----------------------------------------------------
+    // IMPORT / EXPORT CSV
+    // ----------------------------------------------------
+    function exportToCSV() {
+      if (expenses.length === 0) {
+        alert('No data to export!');
+        return;
+      }
+
+      const headers = ['Date', 'Category', 'Amount', 'Note'];
+      const csvRows = [headers.join(',')];
+
+      expenses.forEach(item => {
+        const escapedNote = `"${(item.note || '').replace(/"/g, '""')}"`;
+        const row = [item.date, `"${item.category}"`, item.amount, escapedNote];
+        csvRows.push(row.join(','));
+      });
+
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `expenses_backup_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function importFromCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length < 2) {
+          alert('Invalid CSV format or empty file.');
+          return;
+        }
+
+        let importedCount = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
+          
+          if (cols && cols.length >= 3) {
+            const date = cols[0].replace(/"/g, '').trim();
+            const category = cols[1].replace(/"/g, '').trim();
+            const amount = parseFloat(cols[2].replace(/"/g, '').trim());
+            const note = cols[3] ? cols[3].replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '';
+
+            if (date && category && !isNaN(amount)) {
+              await addExpenseToDB({
+                id: Date.now() + Math.random(),
+                date,
+                category,
+                amount,
+                note
+              });
+              importedCount++;
+            }
+          }
+        }
+
+        await loadAndRender();
+        alert(`Successfully imported ${importedCount} transactions!`);
+        event.target.value = '';
+      };
+
+      reader.readAsText(file);
+    }
+
+    // Initialize Theme, Database and App State
+    initTheme();
+    initDB().then(() => {
+      loadAndRender();
+    });
+  </script>
+</body>
+</html>
