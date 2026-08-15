@@ -3,6 +3,7 @@
   "short_name": "Expenses",
   "description": "Track expenses offline with persistent storage and visual insights.",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#4f46e5",
@@ -13,7 +14,7 @@
       "type": "image/png"
     },
     {
-      "src": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4b3.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
